@@ -1,0 +1,1462 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>China RAS Prospect Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@500;700&display=swap">
+<style>
+/* Layout: chart-room atlas. A reading panel gives the answer first (top 3, four kinds of market),
+   then step 2 inside a province; the honeycomb map fills the rest. Data colours live in the script. */
+:root {
+  --sea: #e8eef0;
+  --land: #dce3e2;
+  --panel: #fbfcfc;
+  --raised: #eef2f3;
+  --ink: #0f1b20;
+  --ink-2: #44535a;
+  --muted: #6c7a80;
+  --hair: #d3dbdc;
+  --accent: #0a6b62;
+  --accent-wash: #dbeeea;
+  --on-accent: #ffffff;
+  --phys: #2a78d6;
+  --placeholder: #8a979c;
+  --font-display: "Barlow Semi Condensed", "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-zh: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --sea: #0a1013; --land: #172024; --panel: #10171a; --raised: #172125; --ink: #e4ecee;
+    --ink-2: #a9b7bc; --muted: #7a888e; --hair: #263238; --accent: #5ec5b7; --accent-wash: #133431;
+    --on-accent: #06211e; --phys: #3987e5; --placeholder: #5f6c72;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --sea: #0a1013; --land: #172024; --panel: #10171a; --raised: #172125; --ink: #e4ecee;
+  --ink-2: #a9b7bc; --muted: #7a888e; --hair: #263238; --accent: #5ec5b7; --accent-wash: #133431;
+  --on-accent: #06211e; --phys: #3987e5; --placeholder: #5f6c72;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--panel); color: var(--ink);
+  font: 15px/1.45 var(--font-body); -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+a { color: var(--accent); text-underline-offset: 2px; }
+[hidden] { display: none !important; }
+body.simple .detail-only { display: none !important; }
+
+.app { display: grid; grid-template-columns: minmax(320px, 410px) minmax(0, 1fr); height: 100%; }
+.panel {
+  overflow-y: auto; border-right: 1px solid var(--hair);
+  padding-block: 22px 28px;
+  padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: 20px;
+  display: flex; flex-direction: column; gap: 22px; min-width: 0;
+}
+.map { position: relative; background: var(--sea); min-height: 0; overflow: hidden; }
+#deck-host { position: absolute; inset: 0; }
+
+/* Masthead */
+.masthead { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.eyebrow {
+  font: 600 11px/1 var(--font-display); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--accent); margin: 0 0 8px;
+}
+h1 { font: 700 30px/1.02 var(--font-display); letter-spacing: -.01em; margin: 0; text-wrap: balance; }
+.lede { color: var(--ink-2); margin: 8px 0 0; max-width: 40ch; }
+.toggle {
+  flex: none; display: inline-flex; align-items: center; gap: 8px; margin-top: 2px;
+  background: transparent; border: 1px solid var(--hair); border-radius: 999px;
+  padding: 5px 10px 5px 6px; cursor: pointer; font-size: 12.5px; color: var(--ink-2); white-space: nowrap;
+}
+.toggle:hover { color: var(--ink); border-color: var(--ink-2); }
+.knob { width: 26px; height: 16px; border-radius: 999px; background: var(--hair); position: relative; flex: none; }
+.knob::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--panel); box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: transform .15s;
+}
+.toggle[aria-pressed="true"] .knob { background: var(--accent); }
+.toggle[aria-pressed="true"] .knob::after { transform: translateX(10px); }
+
+/* Section type */
+.view { display: flex; flex-direction: column; gap: 18px; }
+.step { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.step-no {
+  font: 600 11px/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--muted); border: 1px solid var(--hair); border-radius: 999px; padding: 4px 8px; white-space: nowrap;
+}
+h2 { font: 600 22px/1.15 var(--font-display); margin: 0; text-wrap: balance; }
+h3 {
+  font: 600 12.5px/1.2 var(--font-display); letter-spacing: .09em; text-transform: uppercase;
+  color: var(--ink-2); margin: 0 0 8px; display: flex; align-items: center; gap: 8px;
+}
+.help { color: var(--ink-2); font-size: 14px; margin: 0; max-width: 46ch; }
+.zh { font-family: var(--font-zh); font-weight: 500; }
+.tag {
+  font: 600 10px/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink-2); border: 1px dashed var(--placeholder); border-radius: 4px; padding: 3px 5px;
+}
+.pill {
+  display: inline-block; font: 600 10.5px/1 var(--font-display); letter-spacing: .07em; text-transform: uppercase;
+  border: 1px solid var(--ink-2); color: var(--ink-2); border-radius: 999px; padding: 4px 8px; white-space: nowrap;
+}
+.pill.go { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.pill.fix { border-color: var(--ink); color: var(--ink); }
+.pill.pioneer { border-style: dashed; }
+.pill.watch { border-color: var(--hair); color: var(--muted); }
+
+/* Step 1: top 3 */
+.top3 { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.top3-row {
+  width: 100%; display: grid; grid-template-columns: 1.3em minmax(0, 1fr) auto; gap: 10px; align-items: start;
+  padding: 10px; border: 0; border-radius: 10px; background: transparent; text-align: left; cursor: pointer;
+}
+.top3-row:hover { background: var(--raised); }
+.top3-row .rank { padding-top: 4px; font-size: 13px; }
+.t3-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font: 600 17px/1.2 var(--font-display); }
+.t3-name .zh { font-size: 15px; }
+.t3-why { display: block; font-size: 13.5px; color: var(--ink-2); margin-top: 4px; }
+.arrow { color: var(--muted); padding-top: 2px; }
+
+/* Step 1: four kinds of market */
+.matrix {
+  display: grid; grid-template-columns: 1.1em minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto auto auto; gap: 6px;
+}
+.axis { font: 600 10.5px/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.axis.y {
+  grid-column: 1; grid-row: 1 / span 2; writing-mode: vertical-rl; transform: rotate(180deg);
+  text-align: center; align-self: center; justify-self: center;
+}
+.axis.x { grid-column: 2 / span 2; grid-row: 3; text-align: center; padding-top: 2px; }
+.box {
+  border: 1px solid var(--hair); border-radius: 10px; padding: 10px; min-width: 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.box.fix { grid-column: 2; grid-row: 1; }
+.box.go { grid-column: 3; grid-row: 1; border-color: var(--accent); background: var(--accent-wash); }
+.box.watch { grid-column: 2; grid-row: 2; }
+.box.pioneer { grid-column: 3; grid-row: 2; border-style: dashed; }
+.box h4 { margin: 0; font: 600 15px/1.15 var(--font-display); display: flex; justify-content: space-between; gap: 6px; }
+.box h4 small { font: 500 12px/1.2 var(--font-data); color: var(--muted); }
+.box p { margin: 0; font-size: 12.5px; color: var(--ink-2); line-height: 1.35; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chips button {
+  border: 1px solid var(--hair); background: var(--panel); border-radius: 999px; padding: 3px 8px;
+  font-size: 12.5px; line-height: 1.2; cursor: pointer;
+}
+.chips button:hover { border-color: var(--ink-2); }
+
+/* Province ranking (details) */
+.seg {
+  display: inline-flex; flex-wrap: wrap; border: 1px solid var(--hair); border-radius: 8px;
+  background: var(--raised); padding: 2px; gap: 2px;
+}
+.seg button {
+  font: 500 13px/1 var(--font-body); color: var(--ink-2); background: transparent; border: 0;
+  border-radius: 6px; padding: 7px 10px; cursor: pointer; white-space: nowrap;
+}
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 0 0 1px var(--hair), inset 0 -2px 0 var(--accent); }
+.rank-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  font-size: 12px; color: var(--muted);
+}
+.key { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.key i { display: inline-block; width: 18px; height: 6px; border-radius: 3px; }
+.key .k-phys { background: var(--phys); }
+.key .k-sig { background: repeating-linear-gradient(135deg, var(--placeholder) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 1px var(--placeholder); }
+.ranking { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.prov-row {
+  width: 100%; display: grid; grid-template-columns: 1.6em minmax(0, 1fr) 8.6em; align-items: center; gap: 10px;
+  padding: 7px 8px; border: 0; border-radius: 8px; background: transparent; text-align: left; cursor: pointer;
+}
+.prov-row:hover { background: var(--raised); }
+.rank { font: 500 12px/1 var(--font-data); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.names { display: flex; flex-direction: column; min-width: 0; }
+.names .zh { font-size: 15px; line-height: 1.25; }
+.names .en { font-size: 13px; color: var(--ink-2); line-height: 1.3; }
+.names .sub { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.metrics { display: grid; gap: 5px; }
+.metric { display: grid; grid-template-columns: minmax(0, 1fr) 2.1em; align-items: center; gap: 6px; }
+.metric b { font: 500 12px/1 var(--font-data); text-align: right; font-variant-numeric: tabular-nums; }
+.bar { height: 6px; border-radius: 3px; background: var(--raised); overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 0 3px 3px 0; background: var(--phys); }
+.bar.sig i { background: repeating-linear-gradient(135deg, var(--placeholder) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 1px var(--placeholder); }
+.metric.sig b { color: var(--muted); }
+
+/* Cards */
+.card { border: 1px solid var(--hair); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.card p { margin: 0; font-size: 14px; color: var(--ink-2); }
+.pairs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pairs ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+.pairs li { display: flex; justify-content: space-between; gap: 8px; }
+.pairs li span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.chip {
+  display: inline-grid; place-items: center; min-width: 2.4em; height: 1.6em; padding: 0 6px; border-radius: 4px;
+  font: 600 12px/1 var(--font-data); font-variant-numeric: tabular-nums; flex: none;
+}
+details.method { border-top: 1px solid var(--hair); padding-top: 12px; }
+details.method summary { cursor: pointer; font: 600 14px/1.3 var(--font-display); letter-spacing: .02em; }
+details.method ul { margin: 10px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--ink-2); display: grid; gap: 6px; }
+
+/* Step 2: province */
+.back {
+  align-self: flex-start; background: transparent; border: 1px solid var(--hair); border-radius: 999px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; color: var(--ink-2);
+}
+.back:hover { color: var(--ink); border-color: var(--ink-2); }
+.p-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.p-title .zh { font-size: 26px; font-weight: 700; }
+.p-title .en { font: 600 24px/1.1 var(--font-display); }
+.pitch { margin: 0; font-size: 15px; }
+.pitch b { font-weight: 600; }
+.verdicts { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.verdicts li { display: grid; gap: 2px; padding-bottom: 12px; border-bottom: 1px solid var(--hair); }
+.verdicts li:last-child { border-bottom: 0; padding-bottom: 0; }
+.v-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.v-label { font-size: 12.5px; color: var(--muted); }
+.v-word { font: 600 18px/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+.v-text { font-size: 13.5px; color: var(--ink-2); }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; margin: 0; }
+.stats div { display: flex; flex-direction: column; gap: 2px; }
+.stats dt { font-size: 12.5px; color: var(--muted); order: 2; }
+.stats dd { margin: 0; font: 600 23px/1.1 var(--font-display); font-variant-numeric: tabular-nums; order: 1; }
+.stats dd small { font: 500 13px var(--font-body); color: var(--ink-2); }
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.area-row {
+  width: 100%; display: grid; grid-template-columns: 1.4em auto minmax(0, 1fr); gap: 10px; align-items: center;
+  padding: 7px 8px; border: 0; border-radius: 8px; background: transparent; text-align: left; cursor: pointer;
+}
+.area-row:hover, .area-row[aria-current="true"] { background: var(--raised); }
+.area-row .detail { font-size: 13px; color: var(--ink-2); min-width: 0; }
+.farm { display: grid; gap: 3px; padding: 9px 8px; border-radius: 8px; font-size: 13.5px; }
+.farm.flash { background: var(--accent-wash); }
+.farm .top-line { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
+.farm b { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.farm .meta { color: var(--ink-2); font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.sym { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.sym.operating { background: var(--ink); box-shadow: 0 0 0 1.5px var(--panel); }
+.sym.planned { background: var(--panel); box-shadow: inset 0 0 0 2px var(--ink); }
+.sym.context { width: 7px; height: 7px; background: var(--muted); }
+.sym.market { width: 8px; height: 8px; border-radius: 1px; background: var(--ink); transform: rotate(45deg); }
+.plain { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--ink-2); display: grid; gap: 4px; }
+.coming { border: 1.5px dashed var(--placeholder); border-radius: 10px; padding: 14px; background: var(--raised); }
+.coming h3 { color: var(--ink); }
+.coming p { margin: 0 0 8px; font-size: 13.5px; color: var(--ink-2); }
+.coming ul { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--ink-2); display: grid; gap: 4px; }
+.picked { background: var(--raised); border-radius: 10px; padding: 12px; display: grid; gap: 10px; }
+.picked header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.picked header h3 { margin: 0; }
+.picked button { background: transparent; border: 0; color: var(--accent); cursor: pointer; font-size: 13px; padding: 2px 4px; }
+.readout { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; margin: 0; font-size: 13px; }
+.readout dt { color: var(--muted); }
+.readout dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.readout .h3id { font: 400 11.5px var(--font-data); color: var(--muted); }
+
+/* Why this score? */
+.why { display: grid; gap: 7px; }
+.why-title { font: 600 11.5px/1.2 var(--font-display); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-2); }
+.why-row { display: grid; gap: 3px; font-size: 12.5px; }
+.why-line { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; }
+.why-line span:last-child { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.why-bar { height: 6px; border-radius: 3px; background: var(--hair); overflow: hidden; }
+.why-bar i { display: block; height: 100%; border-radius: 0 3px 3px 0; background: var(--phys); }
+.why-row.ctx .why-bar i { background: var(--placeholder); }
+.why-note { margin: 0; font-size: 11.5px; color: var(--muted); }
+
+.sources { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--hair); padding-top: 12px; display: grid; gap: 6px; }
+.sources p { margin: 0; }
+
+/* Map overlays */
+.map-ui {
+  position: absolute; top: 12px; left: 12px; right: max(12px, env(safe-area-inset-right, 0px));
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; justify-content: space-between; pointer-events: none;
+}
+.map-ui > * { pointer-events: auto; }
+.map-ui .seg { background: var(--panel); box-shadow: 0 2px 10px rgba(10, 20, 25, .10); }
+.map-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.badge {
+  font: 600 11px/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2);
+  background: var(--panel); border: 1px dashed var(--placeholder); border-radius: 6px; padding: 7px 9px;
+}
+.demo-btn {
+  font: 600 13px/1 var(--font-body); background: var(--accent); color: var(--on-accent); border: 0;
+  border-radius: 8px; padding: 8px 12px; cursor: pointer; box-shadow: 0 2px 10px rgba(10, 20, 25, .14);
+}
+.demo-btn:hover { filter: brightness(1.08); }
+body.touring .demo-btn, body.touring .map-ui .seg { display: none !important; }
+
+/* Demo tour card: bottom right, over the empty sea east of China */
+.tour {
+  position: absolute; z-index: 6; right: max(12px, env(safe-area-inset-right, 0px)); bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  width: min(390px, calc(100% - 24px)); background: var(--panel); color: var(--ink);
+  border: 1px solid var(--hair); border-radius: 12px; box-shadow: 0 12px 36px rgba(10, 20, 25, .22);
+  padding: 14px 16px; display: grid; gap: 10px;
+}
+.tour header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tour .t-step { font: 600 11px/1 var(--font-display); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.tour .x { background: transparent; border: 0; padding: 2px 4px; cursor: pointer; color: var(--muted); font-size: 13px; }
+.tour .x:hover { color: var(--ink); }
+.tour h2 { font-size: 21px; }
+.tour p { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+.tour ul { margin: 0; padding-left: 18px; font-size: 14px; color: var(--ink-2); display: grid; gap: 3px; }
+.tour nav { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-top: 2px; }
+.tour .dots { display: flex; gap: 5px; }
+.tour .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--hair); }
+.tour .dots i.on { background: var(--accent); }
+.tour .btn {
+  border: 1px solid var(--hair); background: transparent; border-radius: 8px; padding: 7px 12px;
+  cursor: pointer; font-size: 13.5px; white-space: nowrap;
+}
+.tour .btn:hover:not(:disabled) { border-color: var(--ink-2); }
+.tour .btn:disabled { opacity: .4; cursor: default; }
+.tour .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.legend {
+  position: absolute; left: 12px; bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  width: min(320px, calc(100% - 24px)); background: var(--panel); border: 1px solid var(--hair);
+  border-radius: 10px; padding: 11px 12px 10px; font-size: 12px; display: grid; gap: 8px;
+  box-shadow: 0 2px 10px rgba(10, 20, 25, .08);
+}
+.legend .l-title { font: 600 13px/1.2 var(--font-display); letter-spacing: .02em; }
+.scale { position: relative; height: 34px; }
+.scale .ramp { position: absolute; left: 0; right: 0; top: 10px; height: 10px; border-radius: 3px; }
+.scale .band { position: absolute; top: 2px; height: 6px; border: 1.5px solid var(--ink); border-bottom: 0; border-radius: 2px 2px 0 0; }
+.scale .sep { position: absolute; top: 9px; width: 2px; height: 12px; background: var(--panel); transform: translateX(-1px); }
+.scale .tick { position: absolute; top: 22px; font: 400 11px/1 var(--font-data); color: var(--ink-2); white-space: nowrap; }
+.scale .tick::before { content: ""; position: absolute; top: -4px; width: 1px; height: 4px; background: var(--ink-2); }
+.scale .tick.mid { transform: translateX(-50%); }
+.scale .tick.mid::before { left: 50%; }
+.scale .tick.end { transform: translateX(-100%); }
+.scale .tick.end::before { right: 0; }
+.scale .tick.start::before { left: 0; }
+.scale .tick.word { font: 600 11.5px/1 var(--font-body); color: var(--ink); }
+.scale .tick.word::before { display: none; }
+.legend .l-note { color: var(--ink-2); }
+.legend .symbols { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--ink-2); }
+.legend .symbols span { display: inline-flex; align-items: center; gap: 5px; }
+.legend .res { color: var(--muted); font: 400 11px/1.3 var(--font-data); }
+.tooltip {
+  position: absolute; z-index: 5; pointer-events: none; background: var(--panel); color: var(--ink);
+  border: 1px solid var(--hair); border-radius: 8px; box-shadow: 0 8px 28px rgba(10, 20, 25, .18);
+  padding: 10px 12px; width: 262px; display: grid; gap: 10px; font-size: 13px;
+}
+.t-head { display: flex; align-items: center; gap: 10px; }
+.t-head .chip { font-size: 13px; height: 1.9em; min-width: 3.2em; }
+.t-label { display: grid; gap: 4px; justify-items: start; min-width: 0; }
+.t-name { font-weight: 600; }
+.t-sub { font-size: 12px; color: var(--ink-2); }
+.loading {
+  position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
+  font: 500 14px var(--font-body); color: var(--ink-2);
+}
+.loading span { background: var(--panel); border: 1px solid var(--hair); border-radius: 8px; padding: 10px 14px; max-width: 34ch; text-align: center; pointer-events: auto; }
+
+@media (max-width: 760px) {
+  html, body { height: auto; }
+  .app { display: flex; flex-direction: column; height: auto; }
+  .map { order: -1; height: 62vh; min-height: 380px; }
+  .panel {
+    overflow: visible; border-right: 0; border-top: 1px solid var(--hair);
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .legend { width: auto; right: 12px; }
+  .badge { display: none; }
+  .tour { top: 12px; bottom: auto; left: 12px; right: 12px; width: auto; }
+  .pairs { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .knob::after { transition: none; } }
+</style>
+</head>
+<body class="simple">
+<div class="app">
+  <aside class="panel" id="panel">
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">Mockup · open proxy data</p>
+        <h1>China RAS Prospect Map</h1>
+        <p class="lede">Where to sell salmon and trout RAS in China, and what to lead with.</p>
+      </div>
+      <button class="toggle" id="details-toggle" type="button" aria-pressed="false">
+        <span class="knob" aria-hidden="true"></span>Show details
+      </button>
+    </header>
+
+    <section class="view" id="view-china" aria-labelledby="china-h">
+      <div class="step"><span class="step-no">Step 1</span><h2 id="china-h">Choose a province</h2></div>
+      <div>
+        <h3>Top 3 provinces right now</h3>
+        <p class="help">Most activity first, then the best water.</p>
+        <ol class="top3" id="top3"></ol>
+      </div>
+      <div>
+        <h3>Four kinds of market</h3>
+        <p class="help" style="margin-bottom: 10px">Water and activity are scored separately. Together they tell you how to pitch. Hover a box to see it on the map.</p>
+        <div class="matrix" id="matrix"></div>
+      </div>
+      <div class="view detail-only">
+        <h3>All provinces by score</h3>
+        <div class="seg" role="group" aria-label="Sort provinces by" id="sort"></div>
+        <div class="rank-head">
+          <span>Province</span>
+          <span class="key"><i class="k-phys"></i>Best land</span>
+          <span class="key"><i class="k-sig"></i>Signal (placeholder)</span>
+        </div>
+        <ol class="ranking" id="ranking"></ol>
+      </div>
+      <div class="card detail-only" id="truth"></div>
+      <details class="method detail-only"><summary>How the scores work</summary><ul id="method-list"></ul></details>
+    </section>
+
+    <section class="view" id="view-province" hidden aria-labelledby="p-h">
+      <button class="back" id="back" type="button">← All provinces</button>
+      <div class="step"><span class="step-no">Step 2</span><h2 id="p-h">Where in the province?</h2></div>
+      <div class="p-title"><span class="zh" id="p-zh"></span><span class="en" id="p-en"></span><span class="pill" id="p-seg"></span></div>
+      <p class="pitch" id="p-pitch"></p>
+      <ul class="verdicts" id="p-verdicts"></ul>
+      <dl class="stats detail-only" id="p-stats"></dl>
+      <div class="picked" id="picked" hidden></div>
+      <div><h3>Best places to look</h3><ol class="list" id="p-top"></ol></div>
+      <div><h3>Known projects</h3><ul class="list" id="p-farms"></ul></div>
+      <div><h3>Programmes found <span class="tag">placeholder</span></h3><ul class="plain" id="p-prog"></ul></div>
+      <div class="coming">
+        <h3>Coming with researcher data</h3>
+        <p>These replace the global proxies in every hex:</p>
+        <ul>
+          <li>Measured groundwater temperature, instead of air temperature + 1.5 °C</li>
+          <li>Well yield and aquifer depth</li>
+          <li>Salinity, for brackish grow-out</li>
+          <li>Water chemistry: Fe, Mn, H₂S, CO₂, nitrate</li>
+          <li>Hard exclusions: earthquake, flood and subsidence zones</li>
+        </ul>
+      </div>
+    </section>
+
+    <footer class="sources" id="sources">
+      <p>Data: <a href="https://chelsa-climate.org/" target="_blank" rel="noopener">CHELSA V2.1</a> air temperature, <a href="https://www.wri.org/aqueduct" target="_blank" rel="noopener">WRI Aqueduct 4.0</a>, <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">AWS Terrain Tiles</a>, <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a>, <a href="https://www.geoboundaries.org/" target="_blank" rel="noopener">geoBoundaries</a>, and our list of 24 known farms.</p>
+      <p>Borders are for internal discussion only and are not approved for publication in China.</p>
+      <p id="built"></p>
+    </footer>
+  </aside>
+
+  <main class="map" id="map" aria-label="Map of China coloured by hexagon">
+    <div id="deck-host"></div>
+    <div class="map-ui">
+      <div class="seg detail-only" role="group" aria-label="Colour hexes by" id="layers"></div>
+      <div class="map-actions">
+        <button class="demo-btn" id="demo-start" type="button">▶ Demo tour</button>
+        <span class="badge">Mockup · proxy data</span>
+      </div>
+    </div>
+    <section class="tour" id="tour" hidden aria-live="polite" aria-label="Demo tour"></section>
+    <div class="legend" id="legend" aria-live="polite"></div>
+    <div class="tooltip" id="tooltip" hidden></div>
+    <div class="loading" id="loading"><span>Loading hexes…</span></div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js"></script>
+<script src="https://unpkg.com/deck.gl@9.1.14/dist.min.js"></script>
+<script>
+(async function main() {
+  const $ = (sel) => document.querySelector(sel);
+  const make = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  const fmt = (n) => Math.round(n).toLocaleString('en-US');
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const andList = (xs) => (xs.length < 2 ? (xs[0] || '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+  const median = (xs) => {
+    const s = [...xs].sort((a, b) => a - b), m = s.length >> 1;
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  };
+  const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const ordinal = (n) => {
+    const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const loading = $('#loading');
+  const setLoading = (msg) => {
+    loading.hidden = !msg;
+    if (msg) loading.firstElementChild.textContent = msg;
+  };
+  if (typeof deck === 'undefined' || typeof h3 === 'undefined') {
+    setLoading('The map library did not load. Check the internet connection and reload.');
+    return;
+  }
+
+  // Colour ramps. Blue = suitability (from the validated reference ramp); orange = risk layers;
+  // blue/red with a neutral midpoint = temperature around the ideal. Orange and red steps share blue's lightness.
+  const BLUE = ['#cde2fb', '#b7d3f6', '#9ec5f4', '#86b6ef', '#6da7ec', '#5598e7', '#3987e5', '#2a78d6', '#256abf', '#1c5cab', '#184f95', '#104281', '#0d366b'];
+  const ORANGE = ['#fcd6c9', '#f7c3b0', '#f4af95', '#ee9a7c', '#e98560', '#e27044', '#da5821', '#c94908', '#b43f01', '#9e3601', '#892e02', '#752602', '#611e01'];
+  const RED = ['#ffd4d0', '#fcbfb9', '#faa9a2', '#f5938c', '#f17c74', '#eb645f', '#e34948', '#d2383a', '#bf2a2f', '#aa1e25', '#94181f', '#800e16', '#6a0b11'];
+  const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  function palette(dark) {
+    const b = BLUE.map(rgb), o = ORANGE.map(rgb), r = RED.map(rgb);
+    const mid = rgb(dark ? '#383835' : '#f0efec');
+    const arm = dark ? [12, 10, 8, 6, 4, 2] : [1, 3, 5, 7, 9, 11];
+    return {
+      blue: dark ? [...b].reverse() : b,      // low values recede into the ground in both themes
+      orange: dark ? [...o].reverse() : o,
+      cold: [mid, ...arm.map((i) => b[i])],
+      warm: [mid, ...arm.map((i) => r[i])],
+    };
+  }
+  function lerp(stops, t) {
+    t = Math.max(0, Math.min(1, t));
+    const x = t * (stops.length - 1);
+    const i = Math.min(stops.length - 2, Math.floor(x));
+    const f = x - i, a = stops[i], b = stops[i + 1];
+    return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+  }
+  const mqDark = matchMedia('(prefers-color-scheme: dark)');
+  const isDark = () => {
+    const t = document.documentElement.getAttribute('data-theme');
+    return t ? t === 'dark' : mqDark.matches;
+  };
+  function readTokens() {
+    const cs = getComputedStyle(document.documentElement);
+    const g = (name) => rgb(cs.getPropertyValue(name).trim());
+    return { ink: g('--ink'), ink2: g('--ink-2'), muted: g('--muted'), land: g('--land'), panel: g('--panel') };
+  }
+  let P = palette(isDark());
+  let T = readTokens();
+  const themeKey = () => (isDark() ? 'dark' : 'light');
+
+  // Plain-language words. Hexes and provinces share the same thresholds.
+  const STRONG = 90, GOOD = 70;
+  const hexWord = (s) => (s >= STRONG ? 'Strong' : s >= GOOD ? 'Good' : 'Weak');
+  const activityWord = (n) => (n >= 4 ? 'High' : n >= 2 ? 'Some' : 'Low');
+  const tempWord = (t) => (t < 2 ? 'Too cold' : t < 6 ? 'Cold' : t <= 14 ? 'Ideal' : t < 18 ? 'Warm' : 'Too warm');
+  const waterScore = (w, g) => Math.max(0, 1 - (w + g) / 10);
+  const waterWord = (sw) => (sw >= 0.8 ? 'Plenty' : sw >= 0.5 ? 'Some stress' : 'Scarce');
+  const waterPhrase = (sw) => (sw >= 0.8 ? 'plenty of water' : sw >= 0.5 ? 'some water stress' : 'scarce water');
+  const marketScore = (km) => Math.max(0, Math.min(1, (1000 - km) / 850));
+  const marketWord = (km) => (km <= 300 ? 'Close' : km <= 700 ? 'Medium' : 'Far');
+  const stressLabel = (v) => v < 1 ? 'Low' : v < 2 ? 'Low–medium' : v < 3 ? 'Medium–high' : v < 4 ? 'High' : 'Extremely high or arid';
+  const gtdLabel = (v) => v < 1 ? 'No decline' : v < 2 ? '0–2 cm a year' : v < 3 ? '2–4 cm a year' : v < 4 ? '4–8 cm a year' : 'Over 8 cm a year';
+
+  const METRICS = {
+    score: {
+      label: 'Suitability', title: 'Suitability score (proxy)', kind: 'blue', domain: [0, 100],
+      get: (d, i) => d.s[i], ticks: [[0, '0'], [50, '50'], [70, '70'], [100, '100']],
+      note: '70 or more counts as suitable land, 90 or more as strong.',
+    },
+    temp: {
+      label: 'Water temp', title: 'Groundwater temperature (proxy), °C', kind: 'div', domain: [-6, 10, 26],
+      get: (d, i) => d.t[i] / 10, ticks: [[-6, '−6'], [0, '0'], [6, '6'], [14, '14'], [22, '22'], [26, '26']],
+      band: [6, 14], note: 'Bracket: 6–14 °C, cheap to temper for salmon and trout.',
+    },
+    stress: {
+      label: 'Water stress', title: 'Baseline water stress (WRI Aqueduct)', kind: 'orange', domain: [0, 5],
+      get: (d, i) => d.w[i] / 10, ticks: [[0, 'Low'], [5, 'Extreme or arid']],
+      note: 'How much of the available water is already taken.',
+    },
+    gtd: {
+      label: 'GW decline', title: 'Groundwater table decline (WRI Aqueduct)', kind: 'orange', domain: [0, 5],
+      get: (d, i) => d.g[i] / 10, ticks: [[0, 'None'], [5, 'Over 8 cm a year']],
+      note: 'How fast the water table is falling.',
+    },
+    market: {
+      label: 'To market', title: 'Distance to the nearest big city, km', kind: 'orange', domain: [0, 1500],
+      get: (d, i) => d.m[i], ticks: [[0, '0'], [500, '500'], [1000, '1,000'], [1500, '1,500+']],
+      note: 'Tier-1 cities and major regional hubs. Fresh salmon sells there.',
+    },
+  };
+  function colorOf(metric, v) {
+    const m = METRICS[metric];
+    if (m.kind === 'div') {
+      const [lo, mid, hi] = m.domain;
+      return v <= mid ? lerp(P.cold, (mid - v) / (mid - lo)) : lerp(P.warm, (v - mid) / (hi - mid));
+    }
+    return lerp(P[m.kind], (v - m.domain[0]) / (m.domain[1] - m.domain[0]));
+  }
+
+  // ---- Data --------------------------------------------------------------------------
+  const getJSON = async (path) => {
+    const r = await fetch('data/' + path);
+    if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
+    return r.json();
+  };
+  let D;
+  try {
+    const [prov, r4, r5, shapes, coast, farms] = await Promise.all(
+      ['provinces.json', 'hex_r4.json', 'hex_r5.json', 'provinces.geojson', 'coast.geojson', 'farms.json'].map(getJSON));
+    D = { meta: prov.meta, provinces: prov.provinces, r4, r5, shapes, coast, farms, r6: {}, r6index: {} };
+  } catch (err) {
+    setLoading('The map data did not load. Serve this folder with a local web server, for example: python3 -m http.server -d mockup 8000');
+    console.error(err);
+    return;
+  }
+  const byId = Object.fromEntries(D.provinces.map((p) => [p.id, p]));
+  const markets = D.meta.markets;
+  const H3_AREA = { 4: 1770.3, 5: 252.9, 6: 36.1 };   // average km² per hex
+  let stored = null;
+  try { stored = localStorage.getItem('ras-map-details'); } catch (_) { /* storage can be blocked */ }
+  const S = {
+    mode: 'china', pid: null, metric: 'score', sort: 'p90', res: 4,
+    selected: null, farm: null, hl: null, details: stored === '1',
+    tour: null, spot: null,   // demo tour step, and farms it puts a label on
+  };
+
+  const tempScore = (t) => {
+    const [a, b, c, d] = D.meta.t_curve;
+    if (t <= a || t >= d) return 0;
+    if (t < b) return (t - a) / (b - a);
+    return t <= c ? 1 : (d - t) / (d - c);
+  };
+
+  // ---- Four kinds of market --------------------------------------------------------------
+  // Water (best-land score) and activity (projects + programmes found) stay separate scores;
+  // the pair decides the segment, and the segment decides the pitch.
+  const SEGMENTS = {
+    go: { name: 'Go now', blurb: 'Good water and active buyers.' },
+    fix: { name: 'Sell the fix', blurb: 'Active buyers, but the water is the problem. Sell what fixes it.' },
+    pioneer: { name: 'Pioneer', blurb: 'Good water, few projects yet. Find the first mover.' },
+    watch: { name: 'Watch', blurb: 'Weak on both for now.' },
+  };
+  for (const p of D.provinces) {
+    p.n = p.projects.length + p.programmes.length;
+    p.seg = p.n >= 2 ? (p.p90 >= STRONG ? 'go' : 'fix') : (p.p90 >= STRONG ? 'pioneer' : 'watch');
+    p.bestT = median(p.top.map((a) => a.t));
+    p.bestWater = mean(p.top.map((a) => waterScore(a.w, a.g)));
+  }
+  function problems(p) {
+    const out = [];
+    if (p.mean_t > 15) out.push(['warm water', 'cooling']);
+    if (p.mean_t < 4) out.push(['very cold water', 'heating and heat recovery']);
+    if (p.high_stress_share >= 0.5) out.push(['scarce water', 'high recirculation and water treatment']);
+    return out;
+  }
+  function activityText(p) {
+    const a = p.projects.length, b = p.programmes.length;
+    return [a ? plural(a, 'project') : null, b ? plural(b, 'programme') : null].filter(Boolean).join(' and ');
+  }
+  function pitch(p) {
+    if (p.seg === 'go') return 'Lead with proven salmon and trout RAS. The water is good and buyers are already active.';
+    if (p.seg === 'pioneer') return 'Find the first mover: local government, state-owned firms and new investors. The water is good, but few projects are known yet.';
+    if (p.seg === 'watch') return 'Weak on both counts for now. Look again when the subsidy data arrives.';
+    const pr = problems(p);
+    if (!pr.length) return 'Buyers are active, but good sites are patchy. Lead with site screening and water treatment.';
+    return `Buyers are active, but the catch is ${andList(pr.map((x) => x[0]))}. Lead with ${andList(pr.map((x) => x[1]))}.`;
+  }
+  function reason(p) {
+    const first = p.n ? `${activityText(p)} found` : 'Nothing found yet';
+    if (p.seg === 'fix') {
+      const pr = problems(p);
+      return pr.length
+        ? `${first}, but the catch is ${andList(pr.map((x) => x[0]))}. Lead with ${andList(pr.map((x) => x[1]))}.`
+        : `${first}, but good sites are patchy.`;
+    }
+    return `${first}. Best areas have groundwater around ${Math.round(p.bestT)} °C and ${waterPhrase(p.bestWater)}.`;
+  }
+  const SHORT = { 10: 'Yuzhong', 22: 'Longyangxia', 20: 'Baoxing', 1: 'Ningbo', 15: 'Wujin', 6: 'Shanwei' };
+  const shortName = (f) => SHORT[f.id] || f.name.split(' (')[0];
+  function chip(score) {
+    const c = colorOf('score', score);
+    const lum = (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
+    const n = make('span', 'chip', S.details ? String(score) : hexWord(score));
+    n.style.background = `rgb(${c.map(Math.round).join(',')})`;
+    n.style.color = lum > 0.55 ? '#0f1b20' : '#ffffff';
+    return n;
+  }
+
+  // ---- Map ---------------------------------------------------------------------------
+  const host = $('#deck-host');
+  function fitView(bounds, pad) {
+    const width = host.clientWidth || 800, height = host.clientHeight || 600;
+    const base = Math.max(8, Math.min(pad, Math.floor(Math.min(width, height) / 6)));
+    const padding = { top: base, bottom: base, left: base, right: base };
+    // While the tour runs, keep the view clear of its card (bottom on desktop, top on phones).
+    const tourBox = document.getElementById('tour');
+    const card = tourBox && !tourBox.hidden ? tourBox.getBoundingClientRect() : null;
+    if (card) {
+      const box = host.getBoundingClientRect();
+      if (card.top > box.top + box.height / 2) padding.bottom += Math.min(box.bottom - card.top, height * 0.45);
+      else padding.top += Math.min(card.bottom - box.top, height * 0.45);
+    }
+    const vp = new deck.WebMercatorViewport({ width, height });
+    const { longitude, latitude, zoom } = vp.fitBounds(bounds, { padding });
+    return { longitude, latitude, zoom, pitch: 0, bearing: 0 };
+  }
+  const chinaView = () => fitView([[73.5, 18], [135, 53.6]], 28);
+  const provinceView = (p) => fitView([[p.bbox[0], p.bbox[1]], [p.bbox[2], p.bbox[3]]], 40);
+  const overviewRes = (zoom) => (zoom < 4.4 ? 4 : 5);
+  const start = chinaView();
+  S.res = overviewRes(start.zoom);
+  const FONT = '"Barlow Semi Condensed", Barlow, system-ui, sans-serif';
+  // At the whole-China zoom only these hubs get a label; the rest appear when you zoom in.
+  const MAJOR = new Set(['Beijing', 'Shanghai', 'Guangzhou', 'Chengdu', 'Wuhan', "Xi'an", 'Shenyang', 'Kunming', 'Qingdao']);
+  const deckgl = new deck.Deck({
+    parent: host,
+    initialViewState: start,
+    controller: { dragRotate: false, touchRotate: false },
+    getCursor: ({ isDragging, isHovering }) => (isDragging ? 'grabbing' : isHovering ? 'pointer' : 'grab'),
+    onViewStateChange: ({ viewState }) => {
+      if (S.mode !== 'china') return;
+      const res = overviewRes(viewState.zoom);
+      if (res !== S.res) { S.res = res; render(); renderLegend(); }
+    },
+    onHover,
+    onClick,
+    layers: [],
+  });
+  function flyTo(view) {
+    deckgl.setProps({
+      initialViewState: {
+        ...view,
+        transitionDuration: reduceMotion ? 0 : 900,
+        transitionInterpolator: new deck.FlyToInterpolator(),
+      },
+    });
+  }
+  const hexData = () => (S.mode === 'province' ? D.r6[S.pid] : S.res === 4 ? D.r4 : D.r5);
+
+  function render() {
+    const data = hexData();
+    const tk = themeKey();
+    const hl = S.mode === 'china' ? S.hl : null;
+    const hlKey = hl ? [...hl].join() : '';
+    const layers = [
+      new deck.GeoJsonLayer({
+        id: 'land', data: D.shapes, filled: true, stroked: false,
+        getFillColor: [...T.land, 255], updateTriggers: { getFillColor: tk },
+      }),
+      new deck.GeoJsonLayer({
+        id: 'coast', data: D.coast, filled: false, stroked: true, lineWidthUnits: 'pixels',
+        getLineWidth: 0.8, getLineColor: [...T.muted, 150], updateTriggers: { getLineColor: tk },
+      }),
+    ];
+    if (data) {
+      layers.push(new deck.H3HexagonLayer({
+        id: S.mode === 'province' ? `hex-${S.pid}` : `hex-r${S.res}`,
+        data: { length: data.h.length },
+        getHexagon: (_, { index }) => data.h[index],
+        getFillColor: (_, { index }) => {
+          const c = colorOf(S.metric, METRICS[S.metric].get(data, index));
+          return hl && !hl.has(D.provinces[data.p[index]].id) ? [...c, 55] : c;
+        },
+        extruded: false, filled: true, stroked: false, coverage: 0.88, highPrecision: 'auto',
+        pickable: true, autoHighlight: true, highlightColor: [...T.ink, 110],
+        updateTriggers: { getFillColor: [S.metric, tk, hlKey] },
+      }));
+    }
+    const strongLine = (pid) => (S.mode === 'province' && pid === S.pid) || (hl && hl.has(pid));
+    layers.push(new deck.GeoJsonLayer({
+      id: 'borders', data: D.shapes, filled: false, stroked: true, lineWidthUnits: 'pixels',
+      getLineColor: (f) => (strongLine(f.properties.pid)
+        ? [...T.ink, 255] : [...T.ink2, S.mode === 'province' ? 90 : 130]),
+      getLineWidth: (f) => (strongLine(f.properties.pid) ? 2 : 0.8),
+      updateTriggers: { getLineColor: [S.mode, S.pid, tk, hlKey], getLineWidth: [S.mode, S.pid, hlKey] },
+    }));
+    if (S.selected) {
+      const [la, lo] = h3.cellToLatLng(S.selected);
+      for (const [id, width, color] of [['sel-halo', 5, [...T.panel, 230]], ['sel-ring', 2, [...T.ink, 255]]]) {
+        layers.push(new deck.ScatterplotLayer({
+          id, data: [[lo, la]], getPosition: (d) => d, radiusUnits: 'pixels', getRadius: 12,
+          filled: false, stroked: true, lineWidthUnits: 'pixels', getLineWidth: width, getLineColor: color,
+          updateTriggers: { getLineColor: tk },
+        }));
+      }
+    }
+    if (S.mode === 'china') {
+      const small = new Set(['BJ', 'TJ', 'SH', 'CQ']);   // labelled by their city names instead
+      layers.push(new deck.TextLayer({
+        id: 'prov-labels',
+        data: D.provinces.filter((p) => !small.has(p.id) && (S.res === 5 || p.area_km2 > 60000)),
+        getPosition: (p) => p.label, getText: (p) => p.en.toUpperCase(), getSize: 10.5, sizeUnits: 'pixels',
+        getColor: [...T.ink2, 230], fontFamily: FONT, fontWeight: 600, characterSet: 'auto',
+        fontSettings: { sdf: true }, outlineWidth: 3, outlineColor: [...T.panel, 210],
+        getTextAnchor: 'middle', getAlignmentBaseline: 'center',
+        updateTriggers: { getColor: tk },
+      }));
+    }
+    const shownMarkets = S.mode === 'china' && S.res === 4 ? markets.filter((m) => MAJOR.has(m.name)) : markets;
+    layers.push(new deck.TextLayer({
+      id: 'market-mark', data: shownMarkets, getPosition: (m) => [m.lon, m.lat], getText: () => '◆',
+      getSize: 9, sizeUnits: 'pixels', getColor: [...T.ink, 235], characterSet: ['◆'], fontFamily: FONT,
+      fontSettings: { sdf: true }, outlineWidth: 3, outlineColor: [...T.panel, 230],
+      updateTriggers: { getColor: tk },
+    }));
+    layers.push(new deck.TextLayer({
+      id: 'market-name', data: shownMarkets, getPosition: (m) => [m.lon, m.lat], getText: (m) => m.name,
+      getSize: 12, sizeUnits: 'pixels', getColor: [...T.ink, 235], getPixelOffset: [8, 0],
+      getTextAnchor: 'start', getAlignmentBaseline: 'center', fontFamily: FONT, fontWeight: 600,
+      characterSet: 'auto', fontSettings: { sdf: true }, outlineWidth: 3, outlineColor: [...T.panel, 230],
+      updateTriggers: { getColor: tk },
+    }));
+    layers.push(new deck.ScatterplotLayer({
+      id: 'farms', data: D.farms.filter((f) => f.lat != null),
+      getPosition: (f) => [f.lon, f.lat], radiusUnits: 'pixels',
+      getRadius: (f) => (f.kind === 'context' ? 3.5 : 6) + (f.id === S.farm || (S.spot && S.spot.has(f.id)) ? 3 : 0),
+      filled: true, stroked: true, lineWidthUnits: 'pixels',
+      getFillColor: (f) => f.kind === 'operating' ? [...T.ink, 255] : f.kind === 'planned' ? [...T.panel, 255] : [...T.muted, 255],
+      getLineColor: (f) => (f.kind === 'planned' ? [...T.ink, 255] : [...T.panel, 255]),
+      getLineWidth: (f) => (f.kind === 'planned' ? 2 : 1.5),
+      pickable: true,
+      updateTriggers: { getFillColor: tk, getLineColor: tk, getRadius: [S.farm, S.spot ? [...S.spot].join() : ''] },
+    }));
+    if (S.spot) {
+      layers.push(new deck.TextLayer({
+        id: 'spot-labels', data: D.farms.filter((f) => S.spot.has(f.id) && f.lat != null),
+        getPosition: (f) => [f.lon, f.lat], getText: (f) => `${shortName(f)} ${f.score}`,
+        getSize: 13, sizeUnits: 'pixels', getColor: [...T.ink, 255],
+        // Longyangxia sits just west of Yuzhong, so its label goes on the left to avoid a collision.
+        getPixelOffset: (f) => (f.id === '22' ? [-12, 0] : [12, 0]),
+        getTextAnchor: (f) => (f.id === '22' ? 'end' : 'start'),
+        getAlignmentBaseline: 'center', fontFamily: FONT, fontWeight: 700,
+        characterSet: 'auto', fontSettings: { sdf: true }, outlineWidth: 4, outlineColor: [...T.panel, 240],
+        updateTriggers: { getColor: tk },
+      }));
+    }
+    deckgl.setProps({ layers });
+  }
+
+  // ---- Hex and farm cards (tooltip and selected area) ------------------------------------
+  const tip = $('#tooltip');
+  const kindLabel = (f) => ({ operating: 'Operating', planned: 'Planned', context: 'Other fish farming (not RAS)' })[f.kind];
+  function why(t, w, g, km, marketName, elev) {
+    const box = make('div', 'why');
+    box.append(make('div', 'why-title', 'Why this score?'));
+    const row = (label, value, word, ctx) => {
+      const r = make('div', ctx ? 'why-row ctx' : 'why-row');
+      const line = make('div', 'why-line');
+      line.append(make('span', null, label), make('span', null, word));
+      const bar = make('div', 'why-bar');
+      const fill = make('i');
+      fill.style.width = `${Math.round(Math.max(0.03, value) * 100)}%`;
+      bar.append(fill);
+      r.append(line, bar);
+      box.append(r);
+    };
+    const sw = waterScore(w, g);
+    row('Water temperature', tempScore(t), `${tempWord(t)}, ≈ ${Math.round(t)} °C`);
+    row('Water supply', sw, waterWord(sw));
+    row('Market access', marketScore(km), `${marketWord(km)}, ${marketName} ${fmt(km)} km`, true);
+    const notes = [];
+    if (elev > D.meta.max_elev) notes.push(`Above ${fmt(D.meta.max_elev)} m, so the score is zero.`);
+    notes.push('Market access is shown for context. It is not in the score yet.');
+    box.append(make('p', 'why-note', notes.join(' ')));
+    return box;
+  }
+  function readout(d, i, res) {
+    const dl = make('dl', 'readout');
+    const row = (k, v) => { dl.append(make('dt', null, k), make('dd', null, v)); };
+    const t = d.t[i] / 10, w = d.w[i] / 10, g = d.g[i] / 10;
+    row('Groundwater', `≈ ${t.toFixed(1)} °C`);
+    row('Water stress', `${stressLabel(w)} (${w.toFixed(1)})`);
+    row('GW decline', gtdLabel(g));
+    row('Coast', `${fmt(d.c[i])} km`);
+    row('Elevation', `${fmt(d.e[i])} m`);
+    dl.append(make('dt', null, 'H3'), make('dd', 'h3id', res === 6 ? d.h[i] : `res ${res} · average of ${d.n[i]} res-6 hexes`));
+    return dl;
+  }
+  function hexHead(d, i) {
+    const head = make('div', 't-head');
+    const p = byId[S.mode === 'province' ? S.pid : D.provinces[d.p[i]].id];
+    const label = make('span', 't-label');
+    const name = make('span', 't-name');
+    name.append(document.createTextNode(`${p.en} `), make('span', 'zh', p.zh));
+    label.append(name);
+    if (S.mode === 'china') label.append(make('span', `pill ${p.seg}`, SEGMENTS[p.seg].name));
+    else label.append(make('span', 't-sub', S.details ? 'Hex score, 0–100' : 'Water score for this area'));
+    head.append(chip(d.s[i]), label);
+    return head;
+  }
+  function hexCard(d, i, res) {
+    const frag = document.createDocumentFragment();
+    frag.append(hexHead(d, i), why(d.t[i] / 10, d.w[i] / 10, d.g[i] / 10, d.m[i], markets[d.k[i]].name, d.e[i]));
+    if (S.details) frag.append(readout(d, i, res));
+    return frag;
+  }
+  function farmCard(f) {
+    const box = make('div', 'farm');
+    const status = make('span', 'status');
+    status.append(make('i', `sym ${f.kind}`), document.createTextNode(kindLabel(f)));
+    box.append(make('b', null, f.name), status);
+    box.append(make('span', 'meta', [f.species, f.capacity_t ? `${fmt(+f.capacity_t)} t` : null].filter(Boolean).join(' · ')));
+    const site = make('span', 'meta');
+    site.append(chip(f.score), document.createTextNode(S.details
+      ? `hex score, ${ordinal(f.pct)} percentile in ${byId[f.pid].en}` : 'water score at this site'));
+    box.append(site);
+    return box;
+  }
+  function onHover(info) {
+    if (!info.layer || info.index < 0) { tip.hidden = true; return; }
+    tip.replaceChildren();
+    if (info.layer.id.startsWith('hex')) tip.append(hexCard(hexData(), info.index, S.mode === 'province' ? 6 : S.res));
+    else if (info.layer.id === 'farms') tip.append(farmCard(info.object));
+    else { tip.hidden = true; return; }
+    tip.hidden = false;
+    const box = $('#map').getBoundingClientRect();
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    let x = info.x + 16, y = info.y + 16;
+    if (x + w > box.width - 8) x = info.x - w - 16;
+    if (y + h > box.height - 8) y = Math.max(8, info.y - h - 16);
+    tip.style.left = `${Math.max(8, x)}px`;
+    tip.style.top = `${y}px`;
+  }
+  function onClick(info) {
+    if (!info.layer || info.index < 0) return;
+    if (info.layer.id === 'farms') { openProvince(info.object.pid, { farm: info.object.id }); return; }
+    if (info.layer.id.startsWith('hex')) {
+      const d = hexData();
+      if (S.mode === 'china') openProvince(D.provinces[d.p[info.index]].id);
+      else selectHex(d.h[info.index], false);
+    }
+  }
+
+  // ---- Panel: step 1 -----------------------------------------------------------------
+  function renderStart() {
+    const ol = $('#top3');
+    ol.replaceChildren();
+    D.provinces.filter((p) => p.seg !== 'watch')
+      .sort((a, b) => b.n - a.n || b.p90 - a.p90 || b.good_km2 - a.good_km2)
+      .slice(0, 3)
+      .forEach((p, idx) => {
+        const li = make('li');
+        const b = make('button', 'top3-row');
+        b.type = 'button';
+        const body = make('span');
+        const name = make('span', 't3-name');
+        name.append(make('span', 'zh', p.zh), make('span', null, p.en), make('span', `pill ${p.seg}`, SEGMENTS[p.seg].name));
+        body.append(name, make('span', 't3-why', reason(p)));
+        b.append(make('span', 'rank', String(idx + 1)), body, make('span', 'arrow', '→'));
+        b.addEventListener('click', () => openProvince(p.id));
+        li.append(b);
+        ol.append(li);
+      });
+  }
+  function renderMatrix() {
+    const grid = $('#matrix');
+    grid.replaceChildren(make('span', 'axis y', 'More activity →'), make('span', 'axis x', 'Better water →'));
+    for (const key of ['fix', 'go', 'watch', 'pioneer']) {
+      const seg = SEGMENTS[key];
+      const list = D.provinces.filter((p) => p.seg === key).sort((a, b) => b.n - a.n || b.p90 - a.p90);
+      const box = make('div', `box ${key}`);
+      const h = make('h4');
+      h.append(document.createTextNode(seg.name), make('small', null, String(list.length)));
+      const chips = make('div', 'chips');
+      for (const p of list) {
+        const b = make('button', null, p.en);
+        b.type = 'button';
+        b.addEventListener('click', () => openProvince(p.id));
+        chips.append(b);
+      }
+      box.append(h, make('p', null, seg.blurb), chips);
+      const pids = new Set(list.map((p) => p.id));
+      // The tour sets its own highlight; hovering the boxes must not undo it.
+      const on = () => { if (S.tour == null && S.mode === 'china') { S.hl = pids; render(); } };
+      const off = () => { if (S.tour == null && S.hl) { S.hl = null; render(); } };
+      box.addEventListener('mouseenter', on);
+      box.addEventListener('mouseleave', off);
+      box.addEventListener('focusin', on);
+      box.addEventListener('focusout', off);
+      grid.append(box);
+    }
+  }
+  const SORTS = [['p90', 'Best land'], ['good', 'Suitable area'], ['signal', 'Signal']];
+  const sortEl = $('#sort');
+  for (const [key, label] of SORTS) {
+    const b = make('button', null, label);
+    b.type = 'button';
+    b.dataset.key = key;
+    b.addEventListener('click', () => { S.sort = key; renderRanking(); });
+    sortEl.append(b);
+  }
+  function renderRanking() {
+    for (const b of sortEl.children) b.setAttribute('aria-pressed', String(b.dataset.key === S.sort));
+    const by = {
+      p90: (a, b) => b.p90 - a.p90 || b.good_km2 - a.good_km2,
+      good: (a, b) => b.good_km2 - a.good_km2,
+      signal: (a, b) => b.signal - a.signal || b.p90 - a.p90,
+    }[S.sort];
+    const ol = $('#ranking');
+    ol.replaceChildren();
+    [...D.provinces].sort(by).forEach((p, idx) => {
+      const li = make('li');
+      const b = make('button', 'prov-row');
+      b.type = 'button';
+      b.setAttribute('aria-label', `${p.en}: best land ${p.p90}, signal ${p.signal}, ${fmt(p.good_km2)} km² suitable`);
+      const names = make('span', 'names');
+      names.append(make('span', 'zh', p.zh), make('span', 'en', p.en), make('span', 'sub', `${fmt(p.good_km2)} km² suitable`));
+      const metrics = make('span', 'metrics');
+      for (const [cls, value] of [['phys', p.p90], ['sig', p.signal]]) {
+        const m = make('span', `metric ${cls}`);
+        const bar = make('span', `bar ${cls}`);
+        const fill = make('i');
+        fill.style.width = `${Math.max(2, value)}%`;
+        bar.append(fill);
+        m.append(bar, make('b', null, String(value)));
+        metrics.append(m);
+      }
+      b.append(make('span', 'rank', String(idx + 1)), names, metrics);
+      b.addEventListener('click', () => openProvince(p.id));
+      li.append(b);
+      ol.append(li);
+    });
+  }
+  function renderTruth() {
+    const card = $('#truth');
+    card.replaceChildren(make('h3', null, 'What the proxy data already shows'));
+    const find = (id) => D.farms.find((f) => f.id === id && f.score != null);
+    const group = (title, ids) => {
+      const wrap = make('div');
+      wrap.append(make('h3', null, title));
+      const ul = make('ul');
+      for (const f of ids.map(find).filter(Boolean)) {
+        const li = make('li');
+        li.append(make('span', null, `${f.name.split(' (')[0]}, ${byId[f.pid].en}`), chip(f.score));
+        ul.append(li);
+      }
+      wrap.append(ul);
+      return wrap;
+    };
+    const pairs = make('div', 'pairs');
+    pairs.append(group('Inland cold-water sites', ['10', '22', '20']), group('Coastal RAS sites', ['1', '15', '6']));
+    card.append(pairs, make('p', null,
+      'Geology explains the inland group. The coastal farms sit in warm or water-stressed places: investors chose them for markets and subsidies. That is why water and activity stay separate, and why "Sell the fix" is a market of its own.'));
+    const lost = D.farms.filter((f) => f.lat == null).map((f) => f.name);
+    if (lost.length) card.append(make('p', null, `Not on the map, location unknown: ${lost.join(', ')}.`));
+  }
+  function renderMethod() {
+    const m = D.meta, ul = $('#method-list');
+    const [z0, i0, i1, z1] = m.t_curve;
+    ul.replaceChildren(...[
+      `Water score = ${m.weights.temperature * 100}% water temperature + ${m.weights.water * 100}% water availability, from 0 to 100. Strong is ${STRONG} or more, Good is ${GOOD}–${STRONG - 1}.`,
+      `Groundwater temperature ≈ mean annual air temperature + ${m.gw_offset} °C (a rule of thumb for shallow groundwater).`,
+      `Temperature scores full marks at ${i0}–${i1} °C, falling to zero at ${z0} °C and ${z1} °C.`,
+      'Water availability uses the WRI Aqueduct water-stress and groundwater-decline scores, equally weighted. Arid areas count as fully stressed.',
+      `Land above ${fmt(m.max_elev)} m scores zero.`,
+      `A province's water rating is its best-land score: the 90th percentile of its hex scores.`,
+      'Activity counts the projects and programmes found in desk research. Segments: Go now = strong water and 2 or more; Sell the fix = 2 or more but weaker water; Pioneer = strong water but 0–1; Watch = the rest.',
+      `Hexes are built at H3 res ${m.res_fine} (≈ 36 km²) and averaged up to res 5 and res 4 for the overview.`,
+    ].map((t) => make('li', null, t)));
+    $('#built').textContent = `Built ${m.built} from open global data. A mockup for discussion, not for decisions.`;
+  }
+
+  // ---- Panel: step 2 -----------------------------------------------------------------
+  async function openProvince(pid, opts = {}) {
+    const p = byId[pid];
+    if (!p) return;
+    S.mode = 'province'; S.pid = pid; S.selected = null; S.farm = opts.farm || null; S.hl = null;
+    tip.hidden = true;
+    $('#view-china').hidden = true;
+    $('#view-province').hidden = false;
+    $('#panel').scrollTop = 0;
+    fillProvince(p);
+    flyTo(provinceView(p));
+    if (!D.r6[pid]) {
+      setLoading(`Loading ${p.en} hexes…`);
+      render();
+      try {
+        const d = await getJSON(`hex_r6/${pid}.json`);
+        D.r6[pid] = d;
+        D.r6index[pid] = new Map(d.h.map((c, i) => [c, i]));
+      } catch (err) {
+        setLoading(`The ${p.en} hexes did not load.`);
+        console.error(err);
+        return;
+      }
+      setLoading(null);
+    }
+    if (S.pid !== pid) return;
+    render();
+    renderLegend();
+    if (S.farm) flashFarm(S.farm);
+    try { history.replaceState(null, '', `#${pid}`); } catch (_) { /* not available in every viewer */ }
+  }
+  function closeProvince() {
+    S.mode = 'china'; S.pid = null; S.selected = null; S.farm = null;
+    tip.hidden = true;
+    $('#view-province').hidden = true;
+    $('#view-china').hidden = false;
+    const v = chinaView();
+    S.res = overviewRes(v.zoom);
+    flyTo(v);
+    render();
+    renderLegend();
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (_) { /* ignore */ }
+  }
+  $('#back').addEventListener('click', closeProvince);
+  addEventListener('keydown', (e) => {
+    if (S.tour != null) {
+      // Arrow keys and PageUp/PageDown, which is what presentation clickers send.
+      const step = { ArrowRight: 1, PageDown: 1, ArrowLeft: -1, PageUp: -1 }[e.key];
+      if (step) { e.preventDefault(); goTour(S.tour + step); }
+      else if (e.key === 'Escape') { e.preventDefault(); endTour(); }
+      return;
+    }
+    if (e.key === 'Escape' && S.mode === 'province') closeProvince();
+  });
+
+  function fillProvince(p) {
+    $('#p-zh').textContent = p.zh;
+    $('#p-en').textContent = p.en;
+    const pill = $('#p-seg');
+    pill.className = `pill ${p.seg}`;
+    pill.textContent = SEGMENTS[p.seg].name;
+    $('#p-pitch').replaceChildren(make('b', null, 'How to pitch: '), document.createTextNode(pitch(p)));
+
+    const verdicts = $('#p-verdicts');
+    verdicts.replaceChildren();
+    const verdict = (label, word, text) => {
+      const li = make('li');
+      const head = make('div', 'v-head');
+      head.append(make('span', 'v-label', label), make('span', 'v-word', word));
+      li.append(head, make('span', 'v-text', text));
+      verdicts.append(li);
+    };
+    const pr = problems(p);
+    verdict('Water', hexWord(p.p90),
+      `Best areas: groundwater around ${Math.round(p.bestT)} °C and ${waterPhrase(p.bestWater)}.`
+      + (pr.length ? ` Across the province: ${andList(pr.map((x) => x[0]))}.` : ''));
+    verdict('Activity', activityWord(p.n), p.n ? `${activityText(p)} found in desk research.` : 'Nothing found in desk research yet.');
+    verdict('Suitable land', `${fmt(p.good_km2)} km²`, 'Rated Good or Strong for water.');
+
+    const stats = $('#p-stats');
+    stats.replaceChildren();
+    const stat = (label, value, small) => {
+      const div = make('div');
+      const dd = make('dd', null, value);
+      if (small) dd.append(' ', make('small', null, small));
+      div.append(make('dt', null, label), dd);
+      stats.append(div);
+    };
+    stat('Best-land score', String(p.p90), '/ 100');
+    stat('Signal (placeholder)', String(p.signal), '/ 100');
+    stat('Groundwater, area average', `≈ ${p.mean_t.toFixed(1)}`, '°C');
+    stat('Area with high water stress', `${Math.round(p.high_stress_share * 100)}`, '%');
+
+    fillTop(p);
+    const farms = D.farms.filter((f) => f.pid === p.id);
+    const ul = $('#p-farms');
+    ul.replaceChildren();
+    if (!farms.length) ul.append(make('li', 'farm', 'None found in desk research yet.'));
+    for (const f of farms) {
+      const li = make('li', 'farm');
+      li.dataset.id = f.id;
+      const line = make('div', 'top-line');
+      const status = make('span', 'status');
+      status.append(make('i', `sym ${f.kind}`), document.createTextNode(kindLabel(f)));
+      line.append(make('b', null, f.name), status);
+      li.append(line);
+      const facts = [f.company, f.capacity_t ? `${fmt(+f.capacity_t)} t` : null, S.details ? f.status : null].filter(Boolean).join(' · ');
+      li.append(make('span', 'meta', facts));
+      const site = make('span', 'meta');
+      site.append(chip(f.score), document.createTextNode(S.details
+        ? `hex score, ${ordinal(f.pct)} percentile in ${p.en}` : 'water score at this site'));
+      li.append(site);
+      if (f.source_url) {
+        const a = make('a', null, 'Source ↗');
+        a.href = f.source_url; a.target = '_blank'; a.rel = 'noopener';
+        li.append(a);
+      }
+      ul.append(li);
+    }
+    const prog = $('#p-prog');
+    prog.replaceChildren(...(p.programmes.length ? p.programmes : ['None found in desk research yet.']).map((t) => make('li', null, t)));
+    renderPicked();
+  }
+  function fillTop(p) {
+    const ol = $('#p-top');
+    ol.replaceChildren();
+    p.top.slice(0, S.details ? 10 : 5).forEach((a, idx) => {
+      const li = make('li');
+      const b = make('button', 'area-row');
+      b.type = 'button';
+      b.dataset.h = a.h;
+      b.setAttribute('aria-current', String(S.selected === a.h));
+      const text = S.details
+        ? `≈ ${a.t.toFixed(1)} °C · stress ${stressLabel(a.w).toLowerCase()} · ${markets[a.k].name} ${fmt(a.m)} km`
+        : `≈ ${Math.round(a.t)} °C · ${waterPhrase(waterScore(a.w, a.g))} · ${markets[a.k].name} ${fmt(a.m)} km`;
+      b.append(make('span', 'rank', String(idx + 1)), chip(a.s), make('span', 'detail', text));
+      b.addEventListener('click', () => selectHex(a.h, true));
+      li.append(b);
+      ol.append(li);
+    });
+  }
+  function selectHex(h, fly) {
+    S.selected = h;
+    render();
+    renderPicked();
+    for (const b of $('#p-top').querySelectorAll('button')) b.setAttribute('aria-current', String(b.dataset.h === h));
+    if (fly) {
+      const [la, lo] = h3.cellToLatLng(h);
+      flyTo({ longitude: lo, latitude: la, zoom: 7.6, pitch: 0, bearing: 0 });
+    }
+  }
+  function renderPicked() {
+    const box = $('#picked');
+    const d = D.r6[S.pid];
+    const i = S.selected && d ? D.r6index[S.pid].get(S.selected) : undefined;
+    if (i === undefined) { box.hidden = true; return; }
+    const head = make('header');
+    const clear = make('button', null, 'Clear');
+    clear.type = 'button';
+    clear.addEventListener('click', () => { S.selected = null; render(); renderPicked(); fillTop(byId[S.pid]); });
+    head.append(make('h3', null, 'Selected area'), clear);
+    box.replaceChildren(head, hexCard(d, i, 6));
+    box.hidden = false;
+  }
+  function flashFarm(id) {
+    const li = $(`#p-farms li[data-id="${CSS.escape(id)}"]`);
+    if (!li) return;
+    li.classList.add('flash');
+    li.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+  }
+
+  // ---- Legend and layer switch ----------------------------------------------------------
+  const layerEl = $('#layers');
+  for (const [key, m] of Object.entries(METRICS)) {
+    const b = make('button', null, m.label);
+    b.type = 'button';
+    b.dataset.key = key;
+    b.addEventListener('click', () => { S.metric = key; render(); renderLegend(); });
+    layerEl.append(b);
+  }
+  function renderLegend() {
+    for (const b of layerEl.children) b.setAttribute('aria-pressed', String(b.dataset.key === S.metric));
+    const m = METRICS[S.metric];
+    const simpleScore = !S.details && S.metric === 'score';   // the tour can show other layers in simple mode
+    const lo = m.domain[0], hi = m.domain[m.domain.length - 1];
+    const pos = (v) => ((v - lo) / (hi - lo)) * 100;
+    const stops = Array.from({ length: 25 }, (_, k) => {
+      const v = lo + ((hi - lo) * k) / 24;
+      return `rgb(${colorOf(S.metric, v).map(Math.round).join(',')}) ${(k / 24) * 100}%`;
+    });
+    const scale = make('div', 'scale');
+    const ramp = make('div', 'ramp');
+    ramp.style.background = `linear-gradient(90deg, ${stops.join(', ')})`;
+    scale.append(ramp);
+    if (simpleScore) {
+      // Simple view: three words on the suitability ramp, split where the thresholds sit.
+      for (const v of [GOOD, STRONG]) {
+        const sep = make('span', 'sep');
+        sep.style.left = `${pos(v)}%`;
+        scale.append(sep);
+      }
+      [[0, 'Weak', 'start'], [(GOOD + STRONG) / 2, 'Good', 'mid'], [100, 'Strong', 'end']].forEach(([v, label, cls]) => {
+        const t = make('span', `tick word ${cls}`, label);
+        t.style.left = `${pos(v)}%`;
+        scale.append(t);
+      });
+    } else {
+      if (m.band) {
+        const band = make('div', 'band');
+        band.style.left = `${pos(m.band[0])}%`;
+        band.style.width = `${pos(m.band[1]) - pos(m.band[0])}%`;
+        scale.append(band);
+      }
+      m.ticks.forEach(([v, label], k) => {
+        const cls = k === 0 ? 'start' : k === m.ticks.length - 1 ? 'end' : 'mid';
+        const tick = make('span', `tick ${cls}`, label);
+        tick.style.left = `${pos(v)}%`;
+        scale.append(tick);
+      });
+    }
+    const symbols = make('div', 'symbols');
+    for (const [cls, label] of [['operating', 'Operating farm'], ['planned', 'Planned'], ['context', 'Other fish farming'], ['market', 'Big city']]) {
+      const s = make('span');
+      s.append(make('i', `sym ${cls}`), document.createTextNode(label));
+      symbols.append(s);
+    }
+    const res = S.mode === 'province' ? 6 : S.res;
+    const parts = [
+      make('div', 'l-title', simpleScore ? 'How well the water suits salmon and trout' : m.title),
+      scale,
+      make('div', 'l-note', simpleScore ? 'From open global data. The researcher’s data will sharpen it.' : m.note),
+      symbols,
+    ];
+    if (S.details) parts.push(make('div', 'res', `H3 res ${res} · ≈ ${fmt(H3_AREA[res])} km² per hex${S.mode === 'china' ? ' · zoom in for res 5' : ''}`));
+    $('#legend').replaceChildren(...parts);
+  }
+
+  // ---- Details switch ----------------------------------------------------------------
+  const toggle = $('#details-toggle');
+  function applyDetails() {
+    document.body.classList.toggle('simple', !S.details);
+    toggle.setAttribute('aria-pressed', String(S.details));
+    if (!S.details && S.tour == null) S.metric = 'score';
+    tip.hidden = true;
+    render();
+    renderLegend();
+    renderTruth();
+    if (S.mode === 'province') fillProvince(byId[S.pid]);
+  }
+  toggle.addEventListener('click', () => {
+    S.details = !S.details;
+    try { localStorage.setItem('ras-map-details', S.details ? '1' : '0'); } catch (_) { /* storage can be blocked */ }
+    applyDetails();
+  });
+
+  // ---- Demo tour -------------------------------------------------------------------------
+  // A guided walk for the meeting with the researcher: what the map does, then what their data changes.
+  // Each step sets the whole map state, so Back and Next work from anywhere.
+  const TRUTH_IN = ['10', '22', '20'], TRUTH_OUT = ['1', '15', '6'];
+  const farmList = (ids) => andList(ids.map((id) => D.farms.find((f) => f.id === id))
+    .filter((f) => f && f.score != null).map((f) => `${shortName(f)} ${f.score}`));
+  const segNames = (key, n) => andList(D.provinces.filter((p) => p.seg === key)
+    .sort((a, b) => b.n - a.n || b.p90 - a.p90).slice(0, n).map((p) => p.en));
+  const TOUR = [
+    {
+      title: 'Where in China does salmon RAS make sense?',
+      text: () => `Each hexagon is scored for how well its groundwater suits farming salmon and trout on land. ${isDark() ? 'Brighter' : 'Darker'} blue is better. This version runs on open global data, so treat it as a sketch.`,
+      metric: 'score',
+    },
+    {
+      title: 'Ingredient 1: water temperature',
+      text: () => 'Salmon and trout do best in 6–14 °C water. Pale areas are close to that, blue is colder and red is warmer. Today this is air temperature + 1.5 °C. Measured groundwater temperature would replace it.',
+      metric: 'temp',
+    },
+    {
+      title: 'Ingredient 2: water supply',
+      text: () => `${isDark() ? 'Brighter' : 'Darker'} orange means less water to spare, from WRI Aqueduct's water-stress data. The North China Plain and the dry northwest stand out. Measured well yields would make this much sharper.`,
+      metric: 'stress',
+    },
+    {
+      title: 'A first check against real farms',
+      text: () => `Inland farms on cold water score high: ${farmList(TRUTH_IN)}. The big coastal RAS farms score low: ${farmList(TRUTH_OUT)}. Geology explains the first group. Markets and subsidies explain the second.`,
+      metric: 'score', spot: [...TRUTH_IN, ...TRUTH_OUT],
+    },
+    {
+      title: 'So water and activity are scored apart',
+      text: () => `Together they give four kinds of market, each with its own pitch. Highlighted: provinces where buyers are already active. ${segNames('go', 3)} also have good water: go now. ${segNames('fix', 3)} have buyers but warm or scarce water: sell the technology that fixes it.`,
+      metric: 'score', scrollTo: '#matrix',
+      hl: () => new Set(D.provinces.filter((p) => p.seg === 'go' || p.seg === 'fix').map((p) => p.id)),
+    },
+    {
+      title: 'Inside a province',
+      text: () => {
+        const a = byId.SD.top[0];
+        return `Open a province and the map ranks places inside it, about 36 km² each. The best area in Shandong has groundwater around ${Math.round(a.t)} °C and ${waterPhrase(waterScore(a.w, a.g))}. The panel explains the score and how to pitch.`;
+      },
+      metric: 'score', province: 'SD', selectTop: true,
+    },
+    {
+      title: 'What your data would change',
+      text: () => 'Every number on this map is a global stand-in. Measured data would replace them:',
+      list: ['Groundwater temperature, instead of air temperature + 1.5 °C', 'Well yield and depth',
+        'Salinity and water chemistry', 'No-go zones: earthquake, flood and subsidence'],
+      after: 'With subsidy data, "activity" becomes real money instead of a count of news stories. Our question for you: what can you share, and at what level of detail?',
+      metric: 'score', province: 'SD', selectTop: true, scrollTo: '.coming',
+    },
+  ];
+  const tourEl = $('#tour');
+  function goTour(i) {
+    if (i < 0) return;
+    if (i >= TOUR.length) { endTour(); return; }
+    S.tour = i;
+    tip.hidden = true;
+    renderTour();
+    applyStep(i);
+  }
+  async function applyStep(i) {
+    const st = TOUR[i];
+    S.metric = st.metric;
+    S.spot = st.spot ? new Set(st.spot) : null;
+    if (st.province) {
+      if (S.mode !== 'province' || S.pid !== st.province) await openProvince(st.province);
+      if (S.tour !== i) return;   // the presenter moved on while hexes were loading
+      if (st.selectTop) selectHex(byId[st.province].top[0].h, false);
+    } else if (S.mode === 'province') {
+      closeProvince();
+    } else {
+      flyTo(chinaView());
+    }
+    S.hl = st.hl ? st.hl() : null;
+    render();
+    renderLegend();
+    if (st.scrollTo) $(st.scrollTo)?.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+  }
+  function renderTour() {
+    document.body.classList.toggle('touring', S.tour != null);
+    if (S.tour == null) { tourEl.hidden = true; return; }
+    const st = TOUR[S.tour], last = S.tour === TOUR.length - 1;
+    const head = make('header');
+    const exit = make('button', 'x', 'Exit tour');
+    exit.type = 'button';
+    exit.addEventListener('click', endTour);
+    head.append(make('span', 't-step', `Demo · ${S.tour + 1} of ${TOUR.length}`), exit);
+    const body = [make('h2', null, st.title), make('p', null, st.text())];
+    if (st.list) {
+      const ul = make('ul');
+      ul.append(...st.list.map((t) => make('li', null, t)));
+      body.push(ul);
+    }
+    if (st.after) body.push(make('p', null, st.after));
+    const back = make('button', 'btn', '← Back');
+    back.type = 'button';
+    back.disabled = S.tour === 0;
+    back.addEventListener('click', () => goTour(S.tour - 1));
+    const dots = make('span', 'dots');
+    dots.setAttribute('aria-hidden', 'true');
+    for (let k = 0; k < TOUR.length; k++) dots.append(make('i', k === S.tour ? 'on' : null));
+    const next = make('button', 'btn primary', last ? 'Finish' : 'Next →');
+    next.type = 'button';
+    next.addEventListener('click', () => goTour(S.tour + 1));
+    const nav = make('nav');
+    nav.append(back, dots, next);
+    tourEl.replaceChildren(head, ...body, nav);
+    tourEl.hidden = false;
+    next.focus({ preventScroll: true });
+  }
+  function endTour() {
+    S.tour = null; S.spot = null; S.hl = null;
+    if (!S.details) S.metric = 'score';
+    renderTour();
+    flyTo(S.mode === 'province' ? provinceView(byId[S.pid]) : chinaView());   // take back the room the card used
+    render();
+    renderLegend();
+    $('#demo-start').focus({ preventScroll: true });
+  }
+  $('#demo-start').addEventListener('click', () => goTour(0));
+
+  // ---- Theme follow-up -------------------------------------------------------------------
+  function onTheme() {
+    P = palette(isDark());
+    T = readTokens();
+    render();
+    renderLegend();
+    renderTruth();
+    if (S.mode === 'province') fillProvince(byId[S.pid]);
+    if (S.tour != null) renderTour();   // the tour copy names the colours, which flip with the theme
+  }
+  mqDark.addEventListener('change', onTheme);
+  new MutationObserver(onTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  // ---- Start ---------------------------------------------------------------------------
+  await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]);
+  renderStart();
+  renderMatrix();
+  renderRanking();
+  renderMethod();
+  applyDetails();
+  setLoading(null);
+  function followHash() {
+    const h = location.hash.slice(1).toUpperCase();
+    if (h === 'DEMO') goTour(0);
+    else if (byId[h]) openProvince(h);
+  }
+  followHash();
+  addEventListener('hashchange', followHash);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+# Raw downloads: 1.1 GB, and some files exceed GitHub's 100 MB limit. Recreate with scripts/download_data.sh.
+data/raw/
+
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
