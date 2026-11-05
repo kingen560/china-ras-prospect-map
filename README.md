@@ -2,6 +2,9 @@
 
 An H3 honeycomb map that ranks Chinese provinces, and areas within them, for salmon and trout RAS. It uses open global proxy data. The point is to show the geology researcher and the subsidy contact what their data would improve.
 
+**Open the map:** https://kingen560.github.io/china-ras-prospect-map/mockup/
+**Start the demo tour:** https://kingen560.github.io/china-ras-prospect-map/mockup/#demo
+
 ## View the mockup
 The page loads its data with `fetch`, so it needs a local web server (opening the file directly won't work):
 
